@@ -1,0 +1,1302 @@
+-- WEXIDE MEGA HUB - ULTIMATE CHEAT
+-- TELEGRAM: @Wersaiss
+-- КЛЮЧ: wexidewers
+
+local Player = game.Players.LocalPlayer
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local Camera = game.Workspace.CurrentCamera
+
+-- ========== ГЛОБАЛЬНЫЕ ==========
+local CORRECT_KEY = "wexidewers"
+local KeyAttempts = 0
+local MaxAttempts = 5
+local MenuOpen = false
+local MenuCreated = false
+local MenuGUI = nil
+local ScriptLoaded = true
+
+local Dragging = false
+local DragStart = nil
+local DragOffset = nil
+
+-- ========== НАСТРОЙКИ ==========
+local AimbotEnabled = true
+local AimbotSmoothness = 0.3
+local AimbotFOV = 200
+local AimbotDistance = 1000
+local VisibleCheck = true
+local AimbotKey = Enum.KeyCode.LeftAlt
+local SelectedKeyName = "LeftAlt"
+
+local TeamCheckEnabled = true
+
+local FOVEnabled = true
+local FOVColor = Color3.fromRGB(150, 50, 255)
+local FOVTransparency = 0.3
+local FOVCircleGui = nil
+local FOVCircleFrame = nil
+
+local ESPEnabled = true
+local ESPColor = Color3.fromRGB(255, 0, 0)
+local ESPTransparency = 0.5
+local ESPObjects = {}
+
+local HitboxEnabled = false
+local HitboxColor = Color3.fromRGB(255, 0, 0)
+local HitboxTransparency = 0.7
+local HitboxSize = 5
+local HitboxWallbang = true
+local HitboxObjects = {}
+
+-- ========== ФИЛЬТР КОМАНДЫ ==========
+local function IsTeammate(plr)
+    if not TeamCheckEnabled then return false end
+    if not plr or plr == Player then return true end
+    if not plr.Team or not Player.Team then return false end
+    if plr.Team == Player.Team then return true end
+    return false
+end
+
+-- ========== ХИТБОКС ==========
+local function CreateHitboxForCharacter(character)
+    if not character then return end
+    local hum = character:FindFirstChild("Humanoid")
+    local hrp = character:FindFirstChild("HumanoidRootPart")
+    if not hum or not hrp or hum.Health <= 0 then return end
+    
+    if character:FindFirstChild("WexideHitbox") then
+        character.WexideHitbox:Destroy()
+    end
+    
+    local hitbox = Instance.new("Part")
+    hitbox.Name = "WexideHitbox"
+    hitbox.Size = Vector3.new(HitboxSize, HitboxSize, HitboxSize)
+    hitbox.CFrame = hrp.CFrame
+    hitbox.Anchored = true
+    hitbox.CanCollide = true
+    hitbox.CanQuery = true
+    hitbox.CanTouch = true
+    hitbox.Massless = true
+    hitbox.Transparency = HitboxTransparency
+    hitbox.Color = HitboxColor
+    hitbox.Material = Enum.Material.Neon
+    hitbox.Locked = true
+    hitbox.Parent = character
+    
+    table.insert(HitboxObjects, hitbox)
+    return hitbox
+end
+
+local function UpdateHitboxes()
+    for _, obj in pairs(HitboxObjects) do
+        if obj and obj.Parent then
+            obj:Destroy()
+        end
+    end
+    HitboxObjects = {}
+    
+    if not HitboxEnabled then return end
+    
+    for _, plr in pairs(game.Players:GetPlayers()) do
+        if plr ~= Player and plr.Character then
+            if IsTeammate(plr) then continue end
+            
+            local hum = plr.Character:FindFirstChild("Humanoid")
+            if hum and hum.Health > 0 then
+                CreateHitboxForCharacter(plr.Character)
+            end
+        end
+    end
+end
+
+RunService.RenderStepped:Connect(function()
+    if not HitboxEnabled then return end
+    
+    for _, hitbox in pairs(HitboxObjects) do
+        if hitbox and hitbox.Parent then
+            local char = hitbox.Parent
+            local hrp = char:FindFirstChild("HumanoidRootPart")
+            local hum = char:FindFirstChild("Humanoid")
+            
+            if hrp and hum and hum.Health > 0 then
+                hitbox.CFrame = hrp.CFrame
+                hitbox.Size = Vector3.new(HitboxSize, HitboxSize, HitboxSize)
+                hitbox.Color = HitboxColor
+                hitbox.Transparency = HitboxTransparency
+            else
+                hitbox:Destroy()
+            end
+        end
+    end
+end)
+
+-- ========== FOV КРУГ (БЕЗ ТЕКСТА) ==========
+local function CreateFOVCircle()
+    if FOVCircleGui then FOVCircleGui:Destroy() end
+    FOVCircleGui = Instance.new("ScreenGui")
+    FOVCircleGui.Name = "FOVCircle"
+    FOVCircleGui.ResetOnSpawn = false
+    FOVCircleGui.DisplayOrder = 998
+    FOVCircleGui.Parent = Player.PlayerGui
+    FOVCircleGui.Enabled = FOVEnabled
+    
+    local container = Instance.new("Frame")
+    container.Size = UDim2.new(0, AimbotFOV * 2, 0, AimbotFOV * 2)
+    container.Position = UDim2.new(0.5, -AimbotFOV, 0.5, -AimbotFOV)
+    container.BackgroundTransparency = 1
+    container.BorderSizePixel = 0
+    container.ClipsDescendants = true
+    container.Parent = FOVCircleGui
+    FOVCircleFrame = container
+    
+    -- ЗАЛИВКА
+    local fill = Instance.new("Frame")
+    fill.Size = UDim2.new(1, 0, 1, 0)
+    fill.BackgroundColor3 = FOVColor
+    fill.BackgroundTransparency = 0.85
+    fill.BorderSizePixel = 0
+    fill.Parent = container
+    local fillCorner = Instance.new("UICorner")
+    fillCorner.CornerRadius = UDim.new(1, 0)
+    fillCorner.Parent = fill
+    
+    -- ОБВОДКА
+    local border = Instance.new("Frame")
+    border.Size = UDim2.new(1, 0, 1, 0)
+    border.BackgroundTransparency = 1
+    border.BorderSizePixel = 3
+    border.BorderColor3 = FOVColor
+    border.Parent = container
+    local borderCorner = Instance.new("UICorner")
+    borderCorner.CornerRadius = UDim.new(1, 0)
+    borderCorner.Parent = border
+end
+
+local function UpdateFOVCircle()
+    if FOVCircleFrame then
+        local size = AimbotFOV * 2
+        FOVCircleFrame.Size = UDim2.new(0, size, 0, size)
+        FOVCircleFrame.Position = UDim2.new(0.5, -AimbotFOV, 0.5, -AimbotFOV)
+        
+        for _, child in pairs(FOVCircleFrame:GetChildren()) do
+            if child:IsA("Frame") then
+                if child.BorderSizePixel > 0 then
+                    child.BorderColor3 = FOVColor
+                else
+                    child.BackgroundColor3 = FOVColor
+                end
+            end
+        end
+    end
+end
+
+-- ========== UNLOAD ==========
+local function UnloadScript()
+    if MenuGUI then MenuGUI:Destroy() MenuGUI = nil end
+    if FOVCircleGui then FOVCircleGui:Destroy() FOVCircleGui = nil end
+    for _, obj in pairs(ESPObjects) do
+        if obj and obj.Parent then obj:Destroy() end
+    end
+    for _, obj in pairs(HitboxObjects) do
+        if obj and obj.Parent then obj:Destroy() end
+    end
+    ESPObjects = {}
+    HitboxObjects = {}
+    ScriptLoaded = false
+    print("🔄 SCRIPT UNLOADED! Press Right Shift to reload")
+end
+
+local function ReloadScript()
+    if not ScriptLoaded then
+        ScriptLoaded = true
+        CreateMainMenu()
+        CreateFOVCircle()
+        UpdateESP()
+        UpdateHitboxes()
+        print("✅ SCRIPT RELOADED!")
+    end
+end
+
+-- ========== ЭКРАН КЛЮЧА (С АНИМАЦИЯМИ) ==========
+local function CreateKeyScreen()
+    local ScreenGui = Instance.new("ScreenGui")
+    ScreenGui.Name = "KeyScreen"
+    ScreenGui.ResetOnSpawn = false
+    ScreenGui.DisplayOrder = 999
+    ScreenGui.Parent = Player.PlayerGui
+    
+    local Background = Instance.new("Frame")
+    Background.Size = UDim2.new(1, 0, 1, 0)
+    Background.BackgroundColor3 = Color3.fromRGB(8, 8, 20)
+    Background.BorderSizePixel = 0
+    Background.Parent = ScreenGui
+    
+    local Gradient = Instance.new("UIGradient")
+    Gradient.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(20, 5, 40)),
+        ColorSequenceKeypoint.new(0.5, Color3.fromRGB(5, 10, 50)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(40, 5, 30))
+    })
+    Gradient.Parent = Background
+    
+    -- АНИМИРОВАННЫЕ ЗВЕЗДЫ
+    for i = 1, 80 do
+        local star = Instance.new("Frame")
+        star.Size = UDim2.new(0, math.random(2, 4), 0, math.random(2, 4))
+        star.Position = UDim2.new(math.random(), 0, math.random(), 0)
+        star.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+        star.BackgroundTransparency = math.random(30, 80) / 100
+        star.BorderSizePixel = 0
+        star.Parent = Background
+        TweenService:Create(star, TweenInfo.new(math.random(2, 4), Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true), {
+            BackgroundTransparency = math.random(80, 95) / 100,
+            Position = UDim2.new(star.Position.X.Scale + math.random(-5, 5)/100, 0, star.Position.Y.Scale + math.random(-5, 5)/100, 0)
+        }):Play()
+    end
+    
+    -- ЛЕТАЮЩИЕ ЧАСТИЦЫ
+    for i = 1, 30 do
+        local particle = Instance.new("Frame")
+        particle.Size = UDim2.new(0, math.random(2, 5), 0, math.random(2, 5))
+        particle.Position = UDim2.new(math.random(), 0, math.random(), 0)
+        particle.BackgroundColor3 = Color3.fromRGB(150, 50, 255)
+        particle.BackgroundTransparency = 0.5
+        particle.BorderSizePixel = 0
+        particle.Parent = Background
+        local corner = Instance.new("UICorner")
+        corner.CornerRadius = UDim.new(1, 0)
+        corner.Parent = particle
+        
+        TweenService:Create(particle, TweenInfo.new(math.random(3, 6), Enum.EasingStyle.Linear, Enum.EasingDirection.InOut, -1, true), {
+            Position = UDim2.new(particle.Position.X.Scale, 0, particle.Position.Y.Scale + math.random(-20, 20)/100, 0),
+            BackgroundTransparency = math.random(60, 90)/100
+        }):Play()
+    end
+    
+    -- СВЕТЯЩИЙСЯ ЛОГОТИП
+    local LogoGlow = Instance.new("TextLabel")
+    LogoGlow.Size = UDim2.new(0, 450, 0, 90)
+    LogoGlow.Position = UDim2.new(0.5, -225, 0.15, 0)
+    LogoGlow.BackgroundTransparency = 1
+    LogoGlow.Text = "WEXIDE"
+    LogoGlow.TextColor3 = Color3.fromRGB(150, 50, 255)
+    LogoGlow.TextSize = 90
+    LogoGlow.Font = Enum.Font.GothamBold
+    LogoGlow.TextTransparency = 0.5
+    LogoGlow.Parent = Background
+    
+    local Logo = Instance.new("TextLabel")
+    Logo.Size = UDim2.new(0, 450, 0, 90)
+    Logo.Position = UDim2.new(0.5, -225, 0.15, 0)
+    Logo.BackgroundTransparency = 1
+    Logo.Text = "WEXIDE"
+    Logo.TextColor3 = Color3.fromRGB(255, 255, 255)
+    Logo.TextSize = 90
+    Logo.Font = Enum.Font.GothamBold
+    Logo.TextStrokeColor3 = Color3.fromRGB(150, 50, 255)
+    Logo.TextStrokeTransparency = 0.2
+    Logo.Parent = Background
+    
+    -- АНИМАЦИЯ ПУЛЬСАЦИИ
+    TweenService:Create(Logo, TweenInfo.new(1.5, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true), {
+        TextStrokeTransparency = 0.05,
+        TextSize = 95
+    }):Play()
+    TweenService:Create(LogoGlow, TweenInfo.new(1.5, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true), {
+        TextTransparency = 0.3,
+        TextSize = 95
+    }):Play()
+    
+    -- ПОДЗАГОЛОВОК
+    local Subtitle = Instance.new("TextLabel")
+    Subtitle.Size = UDim2.new(0, 450, 0, 30)
+    Subtitle.Position = UDim2.new(0.5, -225, 0.15, 95)
+    Subtitle.BackgroundTransparency = 1
+    Subtitle.Text = "⚡ ULTIMATE CHEAT SYSTEM ⚡"
+    Subtitle.TextColor3 = Color3.fromRGB(200, 180, 255)
+    Subtitle.TextSize = 18
+    Subtitle.Font = Enum.Font.GothamBold
+    Subtitle.TextTransparency = 0.2
+    Subtitle.Parent = Background
+    
+    -- ИНФО О КЛЮЧЕ
+    local KeyInfo = Instance.new("TextLabel")
+    KeyInfo.Size = UDim2.new(0, 600, 0, 30)
+    KeyInfo.Position = UDim2.new(0.5, -300, 0.31, 0)
+    KeyInfo.BackgroundTransparency = 1
+    KeyInfo.Text = "📱 КЛЮЧ МОЖНО ПОЛУЧИТЬ В КАНАЛЕ: @Wersaiss_Wexide"
+    KeyInfo.TextColor3 = Color3.fromRGB(100, 200, 255)
+    KeyInfo.TextSize = 16
+    KeyInfo.Font = Enum.Font.GothamBold
+    KeyInfo.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+    KeyInfo.TextStrokeTransparency = 0.3
+    KeyInfo.Parent = Background
+    
+    -- ПОЛЕ ВВОДА
+    local InputContainer = Instance.new("Frame")
+    InputContainer.Size = UDim2.new(0, 420, 0, 55)
+    InputContainer.Position = UDim2.new(0.5, -210, 0.43, 0)
+    InputContainer.BackgroundColor3 = Color3.fromRGB(30, 30, 60)
+    InputContainer.BackgroundTransparency = 0.2
+    InputContainer.BorderSizePixel = 0
+    InputContainer.ClipsDescendants = true
+    InputContainer.Parent = Background
+    
+    local Glass = Instance.new("Frame")
+    Glass.Size = UDim2.new(1, 0, 1, 0)
+    Glass.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    Glass.BackgroundTransparency = 0.92
+    Glass.BorderSizePixel = 0
+    Glass.Parent = InputContainer
+    
+    -- Обводка инпута
+    local InputBorder = Instance.new("Frame")
+    InputBorder.Size = UDim2.new(1, 0, 0, 2)
+    InputBorder.Position = UDim2.new(0, 0, 1, -2)
+    InputBorder.BackgroundColor3 = Color3.fromRGB(150, 50, 255)
+    InputBorder.BorderSizePixel = 0
+    InputBorder.Parent = InputContainer
+    
+    local InputBox = Instance.new("TextBox")
+    InputBox.Size = UDim2.new(1, -20, 1, 0)
+    InputBox.Position = UDim2.new(0, 10, 0, 0)
+    InputBox.BackgroundTransparency = 1
+    InputBox.Text = ""
+    InputBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+    InputBox.TextSize = 24
+    InputBox.Font = Enum.Font.GothamBold
+    InputBox.PlaceholderText = "ВВЕДИТЕ КЛЮЧ..."
+    InputBox.PlaceholderColor3 = Color3.fromRGB(100, 100, 150)
+    InputBox.Parent = InputContainer
+    
+    -- АНИМАЦИЯ ИНПУТА
+    InputBox.Focused:Connect(function()
+        TweenService:Create(InputBorder, TweenInfo.new(0.3), {
+            BackgroundColor3 = Color3.fromRGB(50, 200, 255)
+        }):Play()
+    end)
+    InputBox.FocusLost:Connect(function()
+        TweenService:Create(InputBorder, TweenInfo.new(0.3), {
+            BackgroundColor3 = Color3.fromRGB(150, 50, 255)
+        }):Play()
+    end)
+    
+    -- КНОПКА
+    local EnterBtn = Instance.new("TextButton")
+    EnterBtn.Size = UDim2.new(0, 200, 0, 45)
+    EnterBtn.Position = UDim2.new(0.5, -100, 0.55, 0)
+    EnterBtn.BackgroundColor3 = Color3.fromRGB(100, 50, 200)
+    EnterBtn.Text = "✅ АКТИВИРОВАТЬ"
+    EnterBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    EnterBtn.TextSize = 18
+    EnterBtn.Font = Enum.Font.GothamBold
+    EnterBtn.BorderSizePixel = 0
+    EnterBtn.Parent = Background
+    
+    local BtnGrad = Instance.new("UIGradient")
+    BtnGrad.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(150, 50, 255)),
+        ColorSequenceKeypoint.new(0.5, Color3.fromRGB(100, 100, 255)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(50, 150, 255))
+    })
+    BtnGrad.Parent = EnterBtn
+    
+    -- АНИМАЦИЯ КНОПКИ
+    EnterBtn.MouseEnter:Connect(function()
+        TweenService:Create(EnterBtn, TweenInfo.new(0.2), {
+            BackgroundTransparency = 0.1,
+            Size = UDim2.new(0, 210, 0, 48)
+        }):Play()
+    end)
+    EnterBtn.MouseLeave:Connect(function()
+        TweenService:Create(EnterBtn, TweenInfo.new(0.2), {
+            BackgroundTransparency = 0,
+            Size = UDim2.new(0, 200, 0, 45)
+        }):Play()
+    end)
+    
+    -- ПОДСКАЗКА
+    local BottomHint = Instance.new("TextLabel")
+    BottomHint.Size = UDim2.new(0, 450, 0, 30)
+    BottomHint.Position = UDim2.new(0.5, -225, 0.63, 0)
+    BottomHint.BackgroundTransparency = 1
+    BottomHint.Text = "🔑 ВВЕДИТЕ КЛЮЧ И НАЖМИТЕ АКТИВИРОВАТЬ"
+    BottomHint.TextColor3 = Color3.fromRGB(255, 200, 100)
+    BottomHint.TextSize = 15
+    BottomHint.Font = Enum.Font.GothamBold
+    BottomHint.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+    BottomHint.TextStrokeTransparency = 0.3
+    BottomHint.Parent = Background
+    
+    -- ОШИБКА
+    local ErrorText = Instance.new("TextLabel")
+    ErrorText.Size = UDim2.new(0, 450, 0, 30)
+    ErrorText.Position = UDim2.new(0.5, -225, 0.70, 0)
+    ErrorText.BackgroundTransparency = 1
+    ErrorText.Text = ""
+    ErrorText.TextColor3 = Color3.fromRGB(255, 50, 50)
+    ErrorText.TextSize = 16
+    ErrorText.Font = Enum.Font.GothamBold
+    ErrorText.Parent = Background
+    
+    -- TELEGRAM
+    local TelegramText = Instance.new("TextLabel")
+    TelegramText.Size = UDim2.new(0, 350, 0, 25)
+    TelegramText.Position = UDim2.new(0.5, -175, 0.92, 0)
+    TelegramText.BackgroundTransparency = 1
+    TelegramText.Text = "📱 TELEGRAM: @Wersaiss"
+    TelegramText.TextColor3 = Color3.fromRGB(100, 200, 255)
+    TelegramText.TextSize = 16
+    TelegramText.Font = Enum.Font.GothamBold
+    TelegramText.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+    TelegramText.TextStrokeTransparency = 0.2
+    TelegramText.Parent = Background
+    
+    TweenService:Create(TelegramText, TweenInfo.new(2, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true), {
+        TextTransparency = 0.3
+    }):Play()
+    
+    -- ЛОГИКА
+    EnterBtn.MouseButton1Click:Connect(function()
+        local input = string.lower(InputBox.Text)
+        
+        if input == CORRECT_KEY then
+            ErrorText.Text = "✅ КЛЮЧ ПРИНЯТ!"
+            ErrorText.TextColor3 = Color3.fromRGB(50, 255, 50)
+            
+            local fade = TweenService:Create(Background, TweenInfo.new(0.8, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+                BackgroundTransparency = 1
+            })
+            fade:Play()
+            fade.Completed:Wait()
+            
+            ScreenGui:Destroy()
+            CreateMainMenu()
+            CreateFOVCircle()
+            UpdateESP()
+            UpdateHitboxes()
+        else
+            KeyAttempts = KeyAttempts + 1
+            local remaining = MaxAttempts - KeyAttempts
+            ErrorText.Text = "❌ НЕВЕРНЫЙ КЛЮЧ! ОСТАЛОСЬ: " .. remaining
+            
+            TweenService:Create(InputContainer, TweenInfo.new(0.05, Enum.EasingStyle.Linear, Enum.EasingDirection.InOut, 3, true), {
+                Position = UDim2.new(0.5, -210 + math.random(-8, 8), 0.43, 0)
+            }):Play()
+            
+            InputBox.Text = ""
+            if KeyAttempts >= MaxAttempts then
+                ErrorText.Text = "🚫 ДОСТУП ЗАБЛОКИРОВАН"
+                ErrorText.TextColor3 = Color3.fromRGB(255, 0, 0)
+                EnterBtn.Visible = false
+                InputBox.Visible = false
+                BottomHint.Visible = false
+            end
+        end
+    end)
+    
+    InputBox.FocusLost:Connect(function(enter)
+        if enter then EnterBtn.MouseButton1Click:Fire() end
+    end)
+end
+
+-- ========== ESP ==========
+local function UpdateESP()
+    for _, obj in pairs(ESPObjects) do
+        if obj and obj.Parent then obj:Destroy() end
+    end
+    ESPObjects = {}
+    if not ESPEnabled then return end
+    
+    for _, plr in pairs(game.Players:GetPlayers()) do
+        if plr ~= Player and plr.Character then
+            if IsTeammate(plr) then continue end
+            
+            local char = plr.Character
+            local hum = char:FindFirstChild("Humanoid")
+            if hum and hum.Health > 0 then
+                local hl = Instance.new("Highlight")
+                hl.Adornee = char
+                hl.FillColor = ESPColor
+                hl.FillTransparency = ESPTransparency
+                hl.OutlineColor = ESPColor
+                hl.OutlineTransparency = 0.2
+                hl.Parent = char
+                table.insert(ESPObjects, hl)
+                
+                local bill = Instance.new("BillboardGui")
+                bill.Size = UDim2.new(0, 200, 0, 30)
+                bill.Adornee = char:FindFirstChild("Head") or char:FindFirstChild("UpperTorso")
+                bill.AlwaysOnTop = true
+                bill.Parent = char
+                
+                local name = Instance.new("TextLabel")
+                name.Size = UDim2.new(1, 0, 1, 0)
+                name.BackgroundTransparency = 1
+                name.Text = plr.Name
+                name.TextColor3 = ESPColor
+                name.TextSize = 16
+                name.Font = Enum.Font.GothamBold
+                name.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+                name.TextStrokeTransparency = 0.3
+                name.Parent = bill
+                table.insert(ESPObjects, bill)
+            end
+        end
+    end
+end
+
+game.Players.PlayerAdded:Connect(function() wait(0.5) UpdateESP() UpdateHitboxes() end)
+game.Players.PlayerRemoving:Connect(function() wait(0.5) UpdateESP() UpdateHitboxes() end)
+
+-- ========== МЕНЮ (С АНИМАЦИЯМИ) ==========
+function CreateMainMenu()
+    if MenuCreated then return end
+    
+    MenuGUI = Instance.new("ScreenGui")
+    MenuGUI.Name = "WexideMenu"
+    MenuGUI.ResetOnSpawn = false
+    MenuGUI.DisplayOrder = 997
+    MenuGUI.Parent = Player.PlayerGui
+    
+    local Blur = Instance.new("Frame")
+    Blur.Size = UDim2.new(1, 0, 1, 0)
+    Blur.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    Blur.BackgroundTransparency = 0.5
+    Blur.BorderSizePixel = 0
+    Blur.Visible = false
+    Blur.Parent = MenuGUI
+    
+    local MainFrame = Instance.new("Frame")
+    MainFrame.Size = UDim2.new(0, 800, 0, 600)
+    MainFrame.Position = UDim2.new(0.5, -400, 0.5, -300)
+    MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 40)
+    MainFrame.BackgroundTransparency = 0.05
+    MainFrame.BorderSizePixel = 0
+    MainFrame.ClipsDescendants = true
+    MainFrame.Visible = false
+    MainFrame.Parent = MenuGUI
+    
+    -- ПЕРЕТАСКИВАНИЕ
+    MainFrame.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            Dragging = true
+            DragStart = input.Position
+            DragOffset = Vector2.new(MainFrame.AbsolutePosition.X - input.Position.X, MainFrame.AbsolutePosition.Y - input.Position.Y)
+        end
+    end)
+    
+    MainFrame.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            Dragging = false
+        end
+    end)
+    
+    MainFrame.InputChanged:Connect(function(input)
+        if Dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+            local newPos = input.Position + DragOffset
+            MainFrame.Position = UDim2.new(0, newPos.X, 0, newPos.Y)
+        end
+    end)
+    
+    -- ФОН С ГРАДИЕНТОМ
+    local Grad = Instance.new("UIGradient")
+    Grad.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(30, 10, 60)),
+        ColorSequenceKeypoint.new(0.5, Color3.fromRGB(10, 20, 70)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(50, 10, 50))
+    })
+    Grad.Parent = MainFrame
+    
+    -- АНИМАЦИЯ ГРАДИЕНТА (плавное переливание)
+    spawn(function()
+        while MenuCreated do
+            wait(0.1)
+            if not MainFrame or not MainFrame.Parent then break end
+            local rot = math.sin(tick() * 0.5) * 0.5 + 0.5
+            Grad.Rotation = rot * 360
+        end
+    end)
+    
+    local Glass = Instance.new("Frame")
+    Glass.Size = UDim2.new(1, 0, 1, 0)
+    Glass.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    Glass.BackgroundTransparency = 0.92
+    Glass.BorderSizePixel = 0
+    Glass.Parent = MainFrame
+    
+    -- ОБВОДКА С АНИМАЦИЕЙ
+    local Border = Instance.new("Frame")
+    Border.Size = UDim2.new(1, 0, 0, 3)
+    Border.BackgroundColor3 = Color3.fromRGB(150, 50, 255)
+    Border.BorderSizePixel = 0
+    local BorderGrad = Instance.new("UIGradient")
+    BorderGrad.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(150, 50, 255)),
+        ColorSequenceKeypoint.new(0.5, Color3.fromRGB(50, 150, 255)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 50, 150))
+    })
+    BorderGrad.Parent = Border
+    Border.Parent = MainFrame
+    
+    -- АНИМАЦИЯ ОБВОДКИ
+    spawn(function()
+        while MenuCreated do
+            wait(0.05)
+            if not Border or not Border.Parent then break end
+            BorderGrad.Offset = Vector2.new(math.sin(tick() * 0.8) * 0.3, 0)
+        end
+    end)
+    
+    -- ЗАГОЛОВОК
+    local TitleFrame = Instance.new("Frame")
+    TitleFrame.Size = UDim2.new(1, 0, 0, 70)
+    TitleFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    TitleFrame.BackgroundTransparency = 0.3
+    TitleFrame.BorderSizePixel = 0
+    TitleFrame.Parent = MainFrame
+    
+    local Title = Instance.new("TextLabel")
+    Title.Size = UDim2.new(0.7, 0, 1, 0)
+    Title.Position = UDim2.new(0, 20, 0, 0)
+    Title.BackgroundTransparency = 1
+    Title.Text = "WEXIDE"
+    Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+    Title.TextSize = 38
+    Title.Font = Enum.Font.GothamBold
+    Title.TextStrokeColor3 = Color3.fromRGB(150, 50, 255)
+    Title.TextStrokeTransparency = 0.2
+    Title.TextXAlignment = Enum.TextXAlignment.Left
+    Title.Parent = TitleFrame
+    
+    -- АНИМАЦИЯ ЗАГОЛОВКА
+    TweenService:Create(Title, TweenInfo.new(2, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true), {
+        TextStrokeTransparency = 0.05,
+        TextSize = 40
+    }):Play()
+    
+    local TitleSub = Instance.new("TextLabel")
+    TitleSub.Size = UDim2.new(0.7, 0, 0.5, 0)
+    TitleSub.Position = UDim2.new(0, 25, 0.5, 0)
+    TitleSub.BackgroundTransparency = 1
+    TitleSub.Text = "ULTIMATE CHEAT"
+    TitleSub.TextColor3 = Color3.fromRGB(200, 180, 255)
+    TitleSub.TextSize = 14
+    TitleSub.Font = Enum.Font.Gotham
+    TitleSub.TextXAlignment = Enum.TextXAlignment.Left
+    TitleSub.Parent = TitleFrame
+    
+    local TelegramTitle = Instance.new("TextLabel")
+    TelegramTitle.Size = UDim2.new(0.3, 0, 0.5, 0)
+    TelegramTitle.Position = UDim2.new(0.7, 0, 0.25, 0)
+    TelegramTitle.BackgroundTransparency = 1
+    TelegramTitle.Text = "📱 @Wersaiss"
+    TelegramTitle.TextColor3 = Color3.fromRGB(100, 200, 255)
+    TelegramTitle.TextSize = 16
+    TelegramTitle.Font = Enum.Font.GothamBold
+    TelegramTitle.TextXAlignment = Enum.TextXAlignment.Right
+    TelegramTitle.Parent = TitleFrame
+    
+    -- АНИМАЦИЯ TELEGRAM
+    TweenService:Create(TelegramTitle, TweenInfo.new(1.5, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true), {
+        TextTransparency = 0.3
+    }):Play()
+    
+    -- КРЕСТИК
+    local CloseBtn = Instance.new("TextButton")
+    CloseBtn.Size = UDim2.new(0, 40, 0, 40)
+    CloseBtn.Position = UDim2.new(1, -50, 0, 15)
+    CloseBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+    CloseBtn.BackgroundTransparency = 0.2
+    CloseBtn.Text = "✕"
+    CloseBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    CloseBtn.TextSize = 22
+    CloseBtn.Font = Enum.Font.GothamBold
+    CloseBtn.BorderSizePixel = 0
+    CloseBtn.Parent = TitleFrame
+    
+    CloseBtn.MouseEnter:Connect(function()
+        TweenService:Create(CloseBtn, TweenInfo.new(0.2), {
+            BackgroundTransparency = 0.05,
+            Size = UDim2.new(0, 45, 0, 45),
+            Rotation = 90
+        }):Play()
+    end)
+    CloseBtn.MouseLeave:Connect(function()
+        TweenService:Create(CloseBtn, TweenInfo.new(0.2), {
+            BackgroundTransparency = 0.2,
+            Size = UDim2.new(0, 40, 0, 40),
+            Rotation = 0
+        }):Play()
+    end)
+    CloseBtn.MouseButton1Click:Connect(function()
+        ToggleMenu()
+    end)
+    
+    -- ТАБЫ
+    local TabFrame = Instance.new("Frame")
+    TabFrame.Size = UDim2.new(1, 0, 0, 40)
+    TabFrame.Position = UDim2.new(0, 0, 0, 70)
+    TabFrame.BackgroundTransparency = 1
+    TabFrame.Parent = MainFrame
+    
+    local tabs = {"AIM", "ESP", "HITBOX", "SETTINGS"}
+    local tabBtns = {}
+    local currentTab = 1
+    
+    for i, name in ipairs(tabs) do
+        local btn = Instance.new("TextButton")
+        btn.Size = UDim2.new(0.25, 0, 1, 0)
+        btn.Position = UDim2.new((i-1) * 0.25, 0, 0, 0)
+        btn.BackgroundColor3 = i == 1 and Color3.fromRGB(100, 50, 200) or Color3.fromRGB(40, 40, 70)
+        btn.BackgroundTransparency = i == 1 and 0.5 or 0.7
+        btn.Text = name
+        btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+        btn.TextSize = 16
+        btn.Font = Enum.Font.GothamBold
+        btn.BorderSizePixel = 0
+        btn.Parent = TabFrame
+        tabBtns[i] = btn
+        
+        btn.MouseEnter:Connect(function()
+            if i ~= currentTab then
+                TweenService:Create(btn, TweenInfo.new(0.2), {
+                    BackgroundTransparency = 0.5
+                }):Play()
+            end
+        end)
+        btn.MouseLeave:Connect(function()
+            if i ~= currentTab then
+                TweenService:Create(btn, TweenInfo.new(0.2), {
+                    BackgroundTransparency = 0.7
+                }):Play()
+            end
+        end)
+        
+        btn.MouseButton1Click:Connect(function()
+            for j, b in pairs(tabBtns) do
+                TweenService:Create(b, TweenInfo.new(0.3), {
+                    BackgroundColor3 = Color3.fromRGB(40, 40, 70),
+                    BackgroundTransparency = 0.7
+                }):Play()
+            end
+            TweenService:Create(btn, TweenInfo.new(0.3), {
+                BackgroundColor3 = Color3.fromRGB(100, 50, 200),
+                BackgroundTransparency = 0.5
+            }):Play()
+            currentTab = i
+            UpdateTab(i)
+        end)
+    end
+    
+    local Content = Instance.new("ScrollingFrame")
+    Content.Size = UDim2.new(1, -40, 1, -130)
+    Content.Position = UDim2.new(0, 20, 0, 115)
+    Content.BackgroundTransparency = 1
+    Content.BorderSizePixel = 0
+    Content.CanvasSize = UDim2.new(0, 0, 0, 0)
+    Content.ScrollBarThickness = 5
+    Content.ScrollBarImageColor3 = Color3.fromRGB(100, 50, 200)
+    Content.Parent = MainFrame
+    
+    function UpdateTab(tab)
+        for _, child in pairs(Content:GetChildren()) do child:Destroy() end
+        local y = 10
+        
+        if tab == 1 then
+            y = CreateToggle(Content, "🔫 ENABLE AIMBOT", y, AimbotEnabled, function(v) AimbotEnabled = v end)
+            y = CreateSlider(Content, "🎯 SMOOTHNESS", y, 0.05, 1, AimbotSmoothness, function(v) AimbotSmoothness = v end)
+            y = CreateSlider(Content, "👁️ FOV SIZE", y, 50, 500, AimbotFOV, function(v) 
+                AimbotFOV = v 
+                UpdateFOVCircle()
+            end)
+            y = CreateSlider(Content, "📏 MAX DISTANCE", y, 100, 2000, AimbotDistance, function(v) AimbotDistance = v end)
+            y = CreateToggle(Content, "👁️ VISIBLE CHECK", y, VisibleCheck, function(v) VisibleCheck = v end)
+            y = CreateDropdown(Content, "⌨️ AIM KEY", y, {"LeftAlt", "RightAlt", "LeftControl", "RightControl", "X", "C", "V"}, SelectedKeyName, function(v)
+                SelectedKeyName = v
+                AimbotKey = Enum.KeyCode[v]
+            end)
+            
+            y = CreateSection(Content, "👥 TEAM FILTER", y)
+            y = CreateToggle(Content, "🛡️ TEAM CHECK", y, TeamCheckEnabled, function(v) 
+                TeamCheckEnabled = v 
+                UpdateESP()
+                UpdateHitboxes()
+            end)
+            
+            y = CreateSection(Content, "⚡ FOV SETTINGS", y)
+            y = CreateToggle(Content, "⭕ SHOW FOV", y, FOVEnabled, function(v) 
+                FOVEnabled = v
+                if FOVCircleGui then
+                    FOVCircleGui.Enabled = v
+                end
+            end)
+            y = CreateColorPicker(Content, "🎨 FOV COLOR", y, FOVColor, function(v) 
+                FOVColor = v 
+                CreateFOVCircle()
+            end)
+            y = CreateSlider(Content, "🔲 FOV OPACITY", y, 0.05, 1, FOVTransparency, function(v) 
+                FOVTransparency = v 
+                CreateFOVCircle()
+            end)
+            
+        elseif tab == 2 then
+            y = CreateToggle(Content, "👁️ ENABLE ESP", y, ESPEnabled, function(v) ESPEnabled = v UpdateESP() end)
+            y = CreateColorPicker(Content, "🎨 ESP COLOR", y, ESPColor, function(v) ESPColor = v UpdateESP() end)
+            y = CreateSlider(Content, "🔲 ESP OPACITY", y, 0.1, 1, ESPTransparency, function(v) ESPTransparency = v UpdateESP() end)
+            
+            y = CreateSection(Content, "👥 TEAM FILTER", y)
+            y = CreateToggle(Content, "🛡️ TEAM CHECK", y, TeamCheckEnabled, function(v) 
+                TeamCheckEnabled = v 
+                UpdateESP()
+                UpdateHitboxes()
+            end)
+            
+        elseif tab == 3 then
+            y = CreateToggle(Content, "📦 ENABLE HITBOXES", y, HitboxEnabled, function(v) 
+                HitboxEnabled = v 
+                UpdateHitboxes() 
+            end)
+            y = CreateColorPicker(Content, "🎨 HITBOX COLOR", y, HitboxColor, function(v) 
+                HitboxColor = v 
+                UpdateHitboxes() 
+            end)
+            y = CreateSlider(Content, "🔲 HITBOX OPACITY", y, 0.1, 1, HitboxTransparency, function(v) 
+                HitboxTransparency = v 
+                UpdateHitboxes() 
+            end)
+            y = CreateSlider(Content, "📏 HITBOX SIZE", y, 1, 20, HitboxSize, function(v) 
+                HitboxSize = v 
+                UpdateHitboxes() 
+            end)
+            
+            y = CreateSection(Content, "⚙️ ADVANCED", y)
+            y = CreateToggle(Content, "🧱 WALLBANG", y, HitboxWallbang, function(v) 
+                HitboxWallbang = v 
+            end)
+            y = CreateToggle(Content, "🛡️ TEAM CHECK", y, TeamCheckEnabled, function(v) 
+                TeamCheckEnabled = v 
+                UpdateHitboxes()
+                UpdateESP()
+            end)
+            
+            y = CreateSection(Content, "📋 INFO", y)
+            y = CreateInfo(Content, "📦 HITBOX TYPE", y, "CUBE ON HRP")
+            y = CreateInfo(Content, "🎯 SIZE", y, tostring(HitboxSize))
+            y = CreateInfo(Content, "🧱 WALLBANG", y, HitboxWallbang and "ON" or "OFF")
+            y = CreateInfo(Content, "🛡️ TEAM CHECK", y, TeamCheckEnabled and "ON" or "OFF")
+            
+        else
+            y = CreateInfo(Content, "⚡ WEXIDE HUB", y, "v4.0.0")
+            y = CreateInfo(Content, "👨‍💻 DEVELOPER", y, "Wersaiss")
+            y = CreateInfo(Content, "📱 TELEGRAM", y, "@Wersaiss")
+            y = CreateInfo(Content, "📱 KEY CHANNEL", y, "@Wersaiss_Wexide")
+            y = CreateInfo(Content, "🔑 KEY", y, "wexidewers")
+            y = CreateInfo(Content, "🎮 CONTROLS", y, "Right Shift - Menu | " .. SelectedKeyName .. " - Aimbot")
+            
+            y = CreateSection(Content, "🛡️ GLOBAL TEAM CHECK", y)
+            y = CreateToggle(Content, "🛡️ TEAM CHECK ВЕЗДЕ", y, TeamCheckEnabled, function(v) 
+                TeamCheckEnabled = v 
+                UpdateESP()
+                UpdateHitboxes()
+            end)
+            y = CreateInfo(Content, "💡 HINT", y, "Отключает всё на тимейтов")
+            
+            y = CreateButton(Content, "🔄 UPDATE ESP", y, UpdateESP)
+            y = CreateButton(Content, "📦 UPDATE HITBOXES", y, UpdateHitboxes)
+            y = CreateButton(Content, "📱 COPY TELEGRAM", y, function()
+                setclipboard("https://t.me/Wersaiss")
+                print("✅ TELEGRAM COPIED!")
+            end)
+            y = CreateButton(Content, "🔄 UNLOAD SCRIPT", y, function()
+                UnloadScript()
+                print("🔄 SCRIPT UNLOADED! Press Right Shift to reload")
+            end)
+        end
+        Content.CanvasSize = UDim2.new(0, 0, 0, y + 50)
+    end
+    
+    function CreateSection(parent, text, y)
+        local f = Instance.new("Frame")
+        f.Size = UDim2.new(1, 0, 0, 30)
+        f.Position = UDim2.new(0, 0, 0, y)
+        f.BackgroundTransparency = 1
+        f.Parent = parent
+        
+        local l = Instance.new("TextLabel")
+        l.Size = UDim2.new(1, 0, 1, 0)
+        l.BackgroundTransparency = 1
+        l.Text = text
+        l.TextColor3 = Color3.fromRGB(200, 100, 255)
+        l.TextSize = 16
+        l.Font = Enum.Font.GothamBold
+        l.TextXAlignment = Enum.TextXAlignment.Left
+        l.Parent = f
+        
+        local line = Instance.new("Frame")
+        line.Size = UDim2.new(1, 0, 0, 1)
+        line.Position = UDim2.new(0, 0, 1, -2)
+        line.BackgroundColor3 = Color3.fromRGB(150, 50, 255)
+        line.BackgroundTransparency = 0.5
+        line.BorderSizePixel = 0
+        line.Parent = f
+        
+        return y + 35
+    end
+    
+    function CreateToggle(parent, text, y, default, cb)
+        local f = Instance.new("Frame")
+        f.Size = UDim2.new(1, 0, 0, 35)
+        f.Position = UDim2.new(0, 0, 0, y)
+        f.BackgroundTransparency = 1
+        f.Parent = parent
+        
+        local l = Instance.new("TextLabel")
+        l.Size = UDim2.new(0.75, 0, 1, 0)
+        l.BackgroundTransparency = 1
+        l.Text = text
+        l.TextColor3 = Color3.fromRGB(220, 220, 255)
+        l.TextSize = 13
+        l.TextXAlignment = Enum.TextXAlignment.Left
+        l.Font = Enum.Font.Gotham
+        l.TextWrapped = true
+        l.Parent = f
+        
+        local b = Instance.new("TextButton")
+        b.Size = UDim2.new(0, 80, 0, 28)
+        b.Position = UDim2.new(0.78, 0, 0.5, -14)
+        b.BackgroundColor3 = default and Color3.fromRGB(50, 200, 50) or Color3.fromRGB(200, 50, 50)
+        b.Text = default and "ON" or "OFF"
+        b.TextColor3 = Color3.fromRGB(255, 255, 255)
+        b.TextSize = 13
+        b.Font = Enum.Font.GothamBold
+        b.BorderSizePixel = 0
+        b.Parent = f
+        
+        local state = default
+        b.MouseButton1Click:Connect(function()
+            state = not state
+            TweenService:Create(b, TweenInfo.new(0.2), {
+                BackgroundColor3 = state and Color3.fromRGB(50, 200, 50) or Color3.fromRGB(200, 50, 50)
+            }):Play()
+            b.Text = state and "ON" or "OFF"
+            cb(state)
+        end)
+        return y + 40
+    end
+    
+    function CreateSlider(parent, text, y, min, max, default, cb)
+        local f = Instance.new("Frame")
+        f.Size = UDim2.new(1, 0, 0, 40)
+        f.Position = UDim2.new(0, 0, 0, y)
+        f.BackgroundTransparency = 1
+        f.Parent = parent
+        
+        local l = Instance.new("TextLabel")
+        l.Size = UDim2.new(0.4, 0, 0.5, 0)
+        l.BackgroundTransparency = 1
+        l.Text = text .. ": " .. string.format("%.1f", default)
+        l.TextColor3 = Color3.fromRGB(220, 220, 255)
+        l.TextSize = 13
+        l.TextXAlignment = Enum.TextXAlignment.Left
+        l.Font = Enum.Font.Gotham
+        l.Parent = f
+        
+        local s = Instance.new("Frame")
+        s.Size = UDim2.new(0, 180, 0, 10)
+        s.Position = UDim2.new(0.4, 0, 0.6, -5)
+        s.BackgroundColor3 = Color3.fromRGB(50, 50, 80)
+        s.BorderSizePixel = 0
+        s.Parent = f
+        
+        local fill = Instance.new("Frame")
+        fill.Size = UDim2.new((default - min) / (max - min), 0, 1, 0)
+        fill.BackgroundColor3 = Color3.fromRGB(150, 50, 255)
+        fill.BorderSizePixel = 0
+        fill.Parent = s
+        
+        local val = default
+        local drag = false
+        s.InputBegan:Connect(function(i)
+            if i.UserInputType == Enum.UserInputType.MouseButton1 then
+                drag = true
+                local pos = math.clamp((i.Position.X - s.AbsolutePosition.X) / s.AbsoluteSize.X, 0, 1)
+                val = min + (max - min) * pos
+                fill.Size = UDim2.new(pos, 0, 1, 0)
+                l.Text = text .. ": " .. string.format("%.1f", val)
+                cb(val)
+            end
+        end)
+        s.InputEnded:Connect(function() drag = false end)
+        s.InputChanged:Connect(function(i)
+            if drag and i.UserInputType == Enum.UserInputType.MouseMovement then
+                local pos = math.clamp((i.Position.X - s.AbsolutePosition.X) / s.AbsoluteSize.X, 0, 1)
+                val = min + (max - min) * pos
+                fill.Size = UDim2.new(pos, 0, 1, 0)
+                l.Text = text .. ": " .. string.format("%.1f", val)
+                cb(val)
+            end
+        end)
+        return y + 45
+    end
+    
+    function CreateDropdown(parent, text, y, options, default, cb)
+        local f = Instance.new("Frame")
+        f.Size = UDim2.new(1, 0, 0, 35)
+        f.Position = UDim2.new(0, 0, 0, y)
+        f.BackgroundTransparency = 1
+        f.Parent = parent
+        
+        local l = Instance.new("TextLabel")
+        l.Size = UDim2.new(0.4, 0, 1, 0)
+        l.BackgroundTransparency = 1
+        l.Text = text
+        l.TextColor3 = Color3.fromRGB(220, 220, 255)
+        l.TextSize = 13
+        l.TextXAlignment = Enum.TextXAlignment.Left
+        l.Font = Enum.Font.Gotham
+        l.Parent = f
+        
+        local b = Instance.new("TextButton")
+        b.Size = UDim2.new(0, 160, 0, 28)
+        b.Position = UDim2.new(0.45, 0, 0.5, -14)
+        b.BackgroundColor3 = Color3.fromRGB(60, 30, 120)
+        b.Text = default
+        b.TextColor3 = Color3.fromRGB(255, 255, 255)
+        b.TextSize = 13
+        b.Font = Enum.Font.Gotham
+        b.BorderSizePixel = 0
+        b.Parent = f
+        
+        local sel = default
+        b.MouseButton1Click:Connect(function()
+            local idx = table.find(options, sel) or 1
+            idx = idx % #options + 1
+            sel = options[idx]
+            b.Text = sel
+            cb(sel)
+        end)
+        return y + 40
+    end
+    
+    function CreateColorPicker(parent, text, y, default, cb)
+        local f = Instance.new("Frame")
+        f.Size = UDim2.new(1, 0, 0, 35)
+        f.Position = UDim2.new(0, 0, 0, y)
+        f.BackgroundTransparency = 1
+        f.Parent = parent
+        
+        local l = Instance.new("TextLabel")
+        l.Size = UDim2.new(0.4, 0, 1, 0)
+        l.BackgroundTransparency = 1
+        l.Text = text
+        l.TextColor3 = Color3.fromRGB(220, 220, 255)
+        l.TextSize = 13
+        l.TextXAlignment = Enum.TextXAlignment.Left
+        l.Font = Enum.Font.Gotham
+        l.Parent = f
+        
+        local colors = {
+            {name = "🔴 RED", color = Color3.fromRGB(255, 0, 0)},
+            {name = "🟢 GREEN", color = Color3.fromRGB(0, 255, 0)},
+            {name = "🔵 BLUE", color = Color3.fromRGB(0, 150, 255)},
+            {name = "🟣 PURPLE", color = Color3.fromRGB(150, 50, 255)},
+            {name = "🩵 CYAN", color = Color3.fromRGB(0, 255, 255)},
+            {name = "🩷 PINK", color = Color3.fromRGB(255, 50, 200)},
+            {name = "🟡 YELLOW", color = Color3.fromRGB(255, 255, 0)},
+            {name = "⚪ WHITE", color = Color3.fromRGB(255, 255, 255)}
+        }
+        
+        local b = Instance.new("TextButton")
+        b.Size = UDim2.new(0, 160, 0, 28)
+        b.Position = UDim2.new(0.45, 0, 0.5, -14)
+        b.BackgroundColor3 = default
+        b.Text = "🔴 RED"
+        b.TextColor3 = Color3.fromRGB(255, 255, 255)
+        b.TextSize = 13
+        b.Font = Enum.Font.Gotham
+        b.BorderSizePixel = 0
+        b.Parent = f
+        
+        local idx = 1
+        b.MouseButton1Click:Connect(function()
+            idx = idx % #colors + 1
+            b.Text = colors[idx].name
+            TweenService:Create(b, TweenInfo.new(0.2), {
+                BackgroundColor3 = colors[idx].color
+            }):Play()
+            cb(colors[idx].color)
+        end)
+        return y + 40
+    end
+    
+    function CreateInfo(parent, text, y, value)
+        local f = Instance.new("Frame")
+        f.Size = UDim2.new(1, 0, 0, 35)
+        f.Position = UDim2.new(0, 0, 0, y)
+        f.BackgroundTransparency = 1
+        f.Parent = parent
+        
+        local l = Instance.new("TextLabel")
+        l.Size = UDim2.new(0.4, 0, 1, 0)
+        l.BackgroundTransparency = 1
+        l.Text = text
+        l.TextColor3 = Color3.fromRGB(200, 180, 255)
+        l.TextSize = 14
+        l.TextXAlignment = Enum.TextXAlignment.Left
+        l.Font = Enum.Font.GothamBold
+        l.Parent = f
+        
+        local v = Instance.new("TextLabel")
+        v.Size = UDim2.new(0.5, 0, 1, 0)
+        v.Position = UDim2.new(0.45, 0, 0, 0)
+        v.BackgroundTransparency = 1
+        v.Text = value
+        v.TextColor3 = Color3.fromRGB(255, 255, 255)
+        v.TextSize = 14
+        v.TextXAlignment = Enum.TextXAlignment.Right
+        v.Font = Enum.Font.Gotham
+        v.Parent = f
+        return y + 40
+    end
+    
+    function CreateButton(parent, text, y, cb)
+        local b = Instance.new("TextButton")
+        b.Size = UDim2.new(0, 180, 0, 35)
+        b.Position = UDim2.new(0.5, -90, 0, y)
+        b.BackgroundColor3 = Color3.fromRGB(100, 50, 200)
+        b.Text = text
+        b.TextColor3 = Color3.fromRGB(255, 255, 255)
+        b.TextSize = 15
+        b.Font = Enum.Font.GothamBold
+        b.BorderSizePixel = 0
+        b.Parent = parent
+        
+        b.MouseEnter:Connect(function()
+            TweenService:Create(b, TweenInfo.new(0.2), {
+                BackgroundColor3 = Color3.fromRGB(130, 70, 230),
+                Size = UDim2.new(0, 190, 0, 38)
+            }):Play()
+        end)
+        b.MouseLeave:Connect(function()
+            TweenService:Create(b, TweenInfo.new(0.2), {
+                BackgroundColor3 = Color3.fromRGB(100, 50, 200),
+                Size = UDim2.new(0, 180, 0, 35)
+            }):Play()
+        end)
+        
+        b.MouseButton1Click:Connect(cb)
+        return y + 40
+    end
+    
+    function ToggleMenu()
+        if not ScriptLoaded then return end
+        MenuOpen = not MenuOpen
+        MainFrame.Visible = MenuOpen
+        Blur.Visible = MenuOpen
+        
+        if MenuOpen then
+            MainFrame.Size = UDim2.new(0, 0, 0, 0)
+            MainFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
+            TweenService:Create(MainFrame, TweenInfo.new(0.4, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+                Size = UDim2.new(0, 800, 0, 600),
+                Position = UDim2.new(0.5, -400, 0.5, -300)
+            }):Play()
+        end
+    end
+    
+    UpdateTab(1)
+    MenuCreated = true
+    
+    UserInputService.InputBegan:Connect(function(input, processed)
+        if processed then return end
+        if input.KeyCode == Enum.KeyCode.RightShift then
+            if not ScriptLoaded then
+                ReloadScript()
+            else
+                ToggleMenu()
+            end
+        end
+    end)
+    
+    print("✅ WEXIDE MENU CREATED! Press Right Shift to open")
+end
+
+-- ========== AIMBOT ==========
+local function GetClosestPlayer()
+    local closest = nil
+    local closestDistance = AimbotFOV
+    
+    for _, plr in pairs(game.Players:GetPlayers()) do
+        if plr ~= Player and plr.Character then
+            if IsTeammate(plr) then continue end
+            
+            local char = plr.Character
+            local part = char:FindFirstChild("HumanoidRootPart")
+            local hum = char:FindFirstChild("Humanoid")
+            
+            if part and hum and hum.Health > 0 then
+                if HitboxEnabled and char:FindFirstChild("WexideHitbox") then
+                    part = char.WexideHitbox
+                end
+                
+                if VisibleCheck and not HitboxWallbang then
+                    local ray = Ray.new(Camera.CFrame.Position, (part.Position - Camera.CFrame.Position).Unit * 1000)
+                    local hit = game.Workspace:FindPartOnRayWithIgnoreList(ray, {Player.Character, Camera})
+                    if hit and not hit:IsDescendantOf(char) and hit.Name ~= "WexideHitbox" then continue end
+                end
+                
+                local distance = (part.Position - Camera.CFrame.Position).Magnitude
+                if distance > AimbotDistance then continue end
+                local screenPos, onScreen = Camera:WorldToScreenPoint(part.Position)
+                if not onScreen then continue end
+                local center = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+                local fovDist = (Vector2.new(screenPos.X, screenPos.Y) - center).Magnitude
+                if fovDist < closestDistance then
+                    closestDistance = fovDist
+                    closest = plr
+                end
+            end
+        end
+    end
+    return closest
+end
+
+RunService.RenderStepped:Connect(function()
+    if not ScriptLoaded then return end
+    if not AimbotEnabled then return end
+    if not UserInputService:IsKeyDown(AimbotKey) then return end
+    local target = GetClosestPlayer()
+    if not target then return end
+    local targetPart = target.Character and target.Character:FindFirstChild("HumanoidRootPart")
+    
+    if HitboxEnabled and target.Character:FindFirstChild("WexideHitbox") then
+        targetPart = target.Character.WexideHitbox
+    end
+    
+    if not targetPart then return end
+    local direction = (targetPart.Position - Camera.CFrame.Position).Unit
+    local targetCFrame = CFrame.lookAt(Camera.CFrame.Position, Camera.CFrame.Position + direction)
+    Camera.CFrame = Camera.CFrame:Lerp(targetCFrame, AimbotSmoothness)
+end)
+
+spawn(function()
+    while wait(2) do 
+        if ScriptLoaded then
+            UpdateESP() 
+            if HitboxEnabled then
+                UpdateHitboxes()
+            end
+        end
+    end
+end)
+
+-- ========== ЗАПУСК ==========
+print("🚀 WEXIDE MEGA HUB LOADING...")
+print("🔑 KEY: wexidewers")
+print("📱 TELEGRAM: @Wersaiss")
+print("📱 KEY CHANNEL: @Wersaiss_Wexide")
+
+CreateKeyScreen()
